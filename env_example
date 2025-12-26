@@ -1,7 +1,7 @@
 # Slack adatok (OAuth & Permissions menüből)
 SLACK_BOT_TOKEN=xoxb-
 SLACK_SIGNING_SECRET=542
-
+SLACK_CHANNEL_ID =C
 # Supabase adatok (Project Settings -> API)
 SUPABASE_URL=https://whvw
 SUPABASE_KEY=eyJ
