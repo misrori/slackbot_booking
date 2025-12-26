@@ -1,0 +1,5 @@
+flask
+slack_sdk
+supabase
+python-dotenv
+gunicorn
