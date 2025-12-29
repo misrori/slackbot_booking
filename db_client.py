@@ -10,94 +10,76 @@ key: str = os.environ.get("SUPABASE_KEY")
 
 supabase: Client = create_client(url, key)
 
-# Generate 30 desks automatically: "Desk 1", "Desk 2", ..., "Desk 30"
+# Generate 30 desks
 ALL_DESKS = [f"Desk {i}" for i in range(1, 31)]
 
+# --- BOOKING FUNCTIONS ---
+
 def get_available_desks(target_date: str):
-    """
-    Returns a list of desks that are NOT booked on the target date.
-    """
+    """Returns desks NOT booked on target_date."""
     try:
-        # Query bookings for the specific date
         response = supabase.table("bookings").select("desk_id").eq("booking_date", target_date).execute()
         booked_desks = [item['desk_id'] for item in response.data]
-        
-        # Filter available desks
-        available = [desk for desk in ALL_DESKS if desk not in booked_desks]
-        return available
+        return [desk for desk in ALL_DESKS if desk not in booked_desks]
     except Exception as e:
         print(f"DB Error (get_available_desks): {e}")
         return []
 
 def create_booking(user_id: str, desk_id: str, target_date: str):
-    """
-    Attempts to create a booking.
-    1. Checks if the user already has a booking for that date.
-    2. Inserts the new booking if the desk is free.
-    """
+    """Creates a booking if user hasn't booked yet."""
     try:
-        # 1. CHECK: Did this user already book a desk for this date?
-        existing_check = supabase.table("bookings")\
-            .select("id")\
-            .eq("user_id", user_id)\
-            .eq("booking_date", target_date)\
-            .execute()
-        
-        if existing_check.data and len(existing_check.data) > 0:
-            return False, "❌ You already have a booking for this date! Please leave some space for others. :)"
+        # Check existing
+        existing = supabase.table("bookings").select("id").eq("user_id", user_id).eq("booking_date", target_date).execute()
+        if existing.data:
+            return False, "❌ You already have a seat for this day!"
 
-        # 2. CREATE BOOKING
+        # Insert
         data = {"user_id": user_id, "desk_id": desk_id, "booking_date": target_date}
         supabase.table("bookings").insert(data).execute()
-        return True, "Booking successful!"
-        
+        return True, "Success!"
     except Exception as e:
         print(f"Booking Error: {e}")
-        # This catches the Unique Constraint violation (Race Condition)
-        return False, "Sorry, someone just booked this desk a second ago!"
-
-def get_user_bookings(user_id: str):
-    """
-    Retrieves future bookings for a specific user.
-    """
-    today = date.today().isoformat()
-    try:
-        response = supabase.table("bookings")\
-            .select("*")\
-            .eq("user_id", user_id)\
-            .gte("booking_date", today)\
-            .order("booking_date")\
-            .execute()
-        return response.data
-    except Exception as e:
-        print(f"DB Error (get_user_bookings): {e}")
-        return []
+        return False, "Someone just took this desk!"
 
 def delete_booking(booking_id: int, user_id: str):
-    """
-    Deletes a specific booking by ID.
-    """
+    """Deletes a booking."""
     try:
-        response = supabase.table("bookings")\
-            .delete()\
-            .eq("id", booking_id)\
-            .eq("user_id", user_id)\
-            .execute()
+        response = supabase.table("bookings").delete().eq("id", booking_id).eq("user_id", user_id).execute()
         return len(response.data) > 0
     except Exception as e:
-        print(f"DB Error (delete_booking): {e}")
+        print(f"DB Error: {e}")
         return False
 
-def get_bookings_for_date(target_date: str):
-    """
-    Returns all bookings for a specific date (to see who is in the office).
-    """
+def get_user_bookings(user_id: str):
+    """Get future bookings for user."""
+    today = date.today().isoformat()
     try:
-        response = supabase.table("bookings")\
-            .select("*")\
-            .eq("booking_date", target_date)\
-            .execute()
+        return supabase.table("bookings").select("*").eq("user_id", user_id).gte("booking_date", today).order("booking_date").execute().data
+    except Exception:
+        return []
+
+def get_bookings_for_date(target_date: str):
+    """Get all people coming on a specific date."""
+    try:
+        return supabase.table("bookings").select("*").eq("booking_date", target_date).execute().data
+    except Exception:
+        return []
+
+# --- MESSAGE DASHBOARD FUNCTIONS ---
+
+def save_daily_message(target_date: str, channel_id: str, message_ts: str):
+    """Saves the Slack message ID so we can update it later."""
+    try:
+        data = {"target_date": target_date, "channel_id": channel_id, "message_ts": message_ts}
+        supabase.table("daily_messages").upsert(data).execute()
+    except Exception as e:
+        print(f"DB Error (save_daily_message): {e}")
+
+def get_daily_message(target_date: str):
+    """Retrieves the message ID for a specific date."""
+    try:
+        response = supabase.table("daily_messages").select("*").eq("target_date", target_date).maybe_single().execute()
         return response.data
     except Exception as e:
-        print(f"DB Error (get_bookings_for_date): {e}")
-        return []
+        print(f"DB Error (get_daily_message): {e}")
+        return None
